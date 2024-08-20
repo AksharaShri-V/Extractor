@@ -3,3 +3,4 @@ pypdf
 openai
 python-docx
 tiktoken
+python-dotenv
