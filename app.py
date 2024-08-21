@@ -1,41 +1,28 @@
 import streamlit as st
 import base64
-import openai
+import requests
+import json
 import io
 from docx import Document
 from docx.shared import Pt
-import tiktoken
 import os
 
 # Set up OpenAI API key
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 def encode_pdf(file):
     return base64.b64encode(file.read()).decode('utf-8')
 
-def num_tokens_from_string(string: str, encoding_name: str) -> int:
-    encoding = tiktoken.get_encoding(encoding_name)
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
-
-def split_into_chunks(text, max_tokens=3000):
-    encoding = tiktoken.get_encoding("cl100k_base")
-    tokens = encoding.encode(text)
+def split_into_chunks(text, max_chars=12000):
     chunks = []
-    current_chunk = []
-    current_chunk_tokens = 0
-
-    for token in tokens:
-        if current_chunk_tokens + 1 > max_tokens:
-            chunks.append(encoding.decode(current_chunk))
-            current_chunk = []
-            current_chunk_tokens = 0
-        current_chunk.append(token)
-        current_chunk_tokens += 1
-
+    current_chunk = ""
+    for line in text.split('\n'):
+        if len(current_chunk) + len(line) > max_chars:
+            chunks.append(current_chunk)
+            current_chunk = line
+        else:
+            current_chunk += '\n' + line
     if current_chunk:
-        chunks.append(encoding.decode(current_chunk))
-
+        chunks.append(current_chunk)
     return chunks
 
 def process_chunk_with_openai(chunk, is_first_chunk=False):
@@ -71,14 +58,25 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
     If this is the first chunk of the document, start with 'DOCUMENT START:'. If it's the last chunk, end with 'DOCUMENT END:'.
     """
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=[
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "gpt-4o",
+        "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Process the following text chunk from a PDF, following the instructions given. {'This is the first chunk of the document.' if is_first_chunk else ''}\n\n{chunk}"}
         ]
-    )
-    return response.choices[0].message['content']
+    }
+
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, data=json.dumps(data))
+    
+    if response.status_code == 200:
+        return response.json()['choices'][0]['message']['content']
+    else:
+        raise Exception(f"Error in API call: {response.text}")
 
 def create_word_document(content):
     doc = Document()
