@@ -1,5 +1,5 @@
 import streamlit as st
-import pypdf  # Changed from PyPDF2 to pypdf
+import pikepdf
 import openai
 import io
 from docx import Document
@@ -11,10 +11,10 @@ import os
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def extract_text_from_pdf(file):
-    pdf_reader = pypdf.PdfReader(file)  # Changed from PyPDF2.PdfReader to pypdf.PdfReader
+    pdf = pikepdf.Pdf.open(file)
     text = ""
-    for page in pdf_reader.pages:
-        text += page.extract_text() + "\n"
+    for page in pdf.pages:
+        text += page.get_text() + "\n"
     return text
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
@@ -76,7 +76,7 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
     """
 
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Process the following text chunk from a PDF, following the instructions given. {'This is the first chunk of the document.' if is_first_chunk else ''}\n\n{chunk}"}
