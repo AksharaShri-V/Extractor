@@ -1,5 +1,5 @@
 import streamlit as st
-from pdfminer.high_level import extract_text
+import base64
 import openai
 import io
 from docx import Document
@@ -9,8 +9,9 @@ import os
 
 # Set up OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
-def extract_text_from_pdf(file):
-    return extract_text(file)
+
+def encode_pdf(file):
+    return base64.b64encode(file.read()).decode('utf-8')
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     encoding = tiktoken.get_encoding(encoding_name)
@@ -119,9 +120,8 @@ def main():
         if st.button("Process PDF"):
             with st.spinner("Processing PDF and generating Word document... This may take a while."):
                 try:
-                    file_contents = uploaded_file.read()
-                    text = extract_text_from_pdf(io.BytesIO(file_contents))
-                    chunks = split_into_chunks(text)
+                    encoded_pdf = encode_pdf(uploaded_file)
+                    chunks = split_into_chunks(encoded_pdf)
                     processed_chunks = []
 
                     for i, chunk in enumerate(chunks):
