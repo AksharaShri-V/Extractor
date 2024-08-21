@@ -1,6 +1,5 @@
 streamlit
-pypdf
+PyPDF2
 openai
 python-docx
 tiktoken
-python-dotenv
