@@ -1,5 +1,5 @@
 streamlit
-pikepdf
+pdfminer.six
 openai
 python-docx
 tiktoken
