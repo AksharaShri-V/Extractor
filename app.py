@@ -1,16 +1,16 @@
 import streamlit as st
-import pypdf
+import PyPDF2
 import openai
 import io
 from docx import Document
+from docx.shared import Pt
 import tiktoken
 import os
 
 # Set up OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
 def extract_text_from_pdf(file):
-    pdf_reader = pypdf.PdfReader(file)
+    pdf_reader = PyPDF2.PdfReader(file)
     text = ""
     for page in pdf_reader.pages:
         text += page.extract_text() + "\n"
@@ -21,7 +21,7 @@ def num_tokens_from_string(string: str, encoding_name: str) -> int:
     num_tokens = len(encoding.encode(string))
     return num_tokens
 
-def split_into_chunks(text, max_tokens=4000):
+def split_into_chunks(text, max_tokens=3000):
     encoding = tiktoken.get_encoding("cl100k_base")
     tokens = encoding.encode(text)
     chunks = []
@@ -41,57 +41,71 @@ def split_into_chunks(text, max_tokens=4000):
 
     return chunks
 
-def process_chunk_with_openai(chunk):
+def process_chunk_with_openai(chunk, is_first_chunk=False):
     system_instruction = """
     You are an advanced AI assistant specialized in processing text from PDFs. Your tasks are:
 
-    1. Directly extract and mark headings using HTML tags:
-       - Main headings: <h3>Heading</h3>
-       - Subheadings: <h4>Subheading</h4>
-       - Sub-subheadings: <h5>Sub-subheading</h5>
+    1. Identify main headings, subheadings, and side headings. Use the following format:
+       MAIN HEADING: text
+       SUBHEADING: text
+       SIDE HEADING: text
 
-    2. Extract and format normal text paragraphs without modification.
+    2. Extract and format normal text paragraphs completely. Ensure no sentences or words are left incomplete.
 
-    3. For any listed data or enumerated information:
-       - Convert it into an HTML unordered list using <ul> and <li> tags
-       - Each item should be wrapped in <li> tags
+    3. Identify any listed data or enumerated information and preserve its format.
 
     4. Detect any tabular data structures within the text. For each detected table:
-       - Convert each row of the table into a human-readable sentence
-       - Start the sentence with the first column's value as the subject
-       - Connect it logically with the values from other columns
-       - Present these sentences as list items using <li> tags within a <ul> tag
+       - Convert each row of the table into a bullet point
+       - Start each bullet point with the first column's value
+       - Include all values from all columns in the bullet point
+       - Ensure that the relationship between all columns is clearly expressed
+       - Do not omit any data for brevity
+       For example, if a table has columns "Name", "Age", "Occupation", and "Salary", a row might be converted to:
+       • John Doe, aged 30, works as a software engineer and earns $75,000 annually.
 
     5. Maintain the original order and context of the document while processing.
 
-    Your goal is to directly extract and minimally transform the document content, preserving the original information and structure as much as possible.
+    6. Do not use any special characters or symbols for formatting except for the bullet points (•) for table data.
+
+    7. It is crucial that you process and include ALL content from the given chunk. Do not truncate or omit any information.
+
+    Your goal is to extract and transform the document content completely, preserving all original information and structure, while ensuring that tabular data is presented as bullet points that clearly convey the relationships between all data points.
+
+    If this is the first chunk of the document, start with 'DOCUMENT START:'. If it's the last chunk, end with 'DOCUMENT END:'.
     """
 
     response = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[
             {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Process the following text chunk from a PDF, following the instructions given:\n\n{chunk}"}
+            {"role": "user", "content": f"Process the following text chunk from a PDF, following the instructions given. {'This is the first chunk of the document.' if is_first_chunk else ''}\n\n{chunk}"}
         ]
     )
     return response.choices[0].message['content']
 
 def create_word_document(content):
     doc = Document()
-
-    for line in content.split('\n'):
-        if line.startswith('<h3>'):
-            doc.add_paragraph(line.replace('<h3>', '').replace('</h3>', ''), style='Heading 3')
-        elif line.startswith('<h4>'):
-            doc.add_paragraph(line.replace('<h4>', '').replace('</h4>', ''), style='Heading 4')
-        elif line.startswith('<h5>'):
-            doc.add_paragraph(line.replace('<h5>', '').replace('</h5>', ''), style='Heading 5')
-        elif line.startswith('<ul>'):
-            continue  # Skip the <ul> tag
-        elif line.startswith('</ul>'):
-            continue  # Skip the </ul> tag
-        elif line.startswith('<li>'):
-            doc.add_paragraph(line.replace('<li>', '').replace('</li>', ''), style='List Bullet')
+    
+    # Define styles for different heading levels
+    styles = doc.styles
+    styles['Heading 1'].font.size = Pt(16)
+    styles['Heading 2'].font.size = Pt(14)
+    styles['Heading 3'].font.size = Pt(12)
+    
+    lines = content.split('\n')
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        if line.startswith('MAIN HEADING:'):
+            doc.add_paragraph(line.replace('MAIN HEADING:', '').strip(), style='Heading 1')
+        elif line.startswith('SUBHEADING:'):
+            doc.add_paragraph(line.replace('SUBHEADING:', '').strip(), style='Heading 2')
+        elif line.startswith('SIDE HEADING:'):
+            doc.add_paragraph(line.replace('SIDE HEADING:', '').strip(), style='Heading 3')
+        elif line.startswith('•'):
+            doc.add_paragraph(line, style='List Bullet')
         else:
             doc.add_paragraph(line)
 
@@ -116,7 +130,7 @@ def main():
 
                     for i, chunk in enumerate(chunks):
                         st.text(f"Processing chunk {i+1} of {len(chunks)}...")
-                        processed_chunk = process_chunk_with_openai(chunk)
+                        processed_chunk = process_chunk_with_openai(chunk, is_first_chunk=(i==0))
                         processed_chunks.append(processed_chunk)
 
                     processed_text = "\n".join(processed_chunks)
@@ -124,11 +138,14 @@ def main():
 
                     st.success("Processing complete. Click the button below to download the Word document.")
                     
+                    # Use the original filename for the download
+                    original_filename = os.path.splitext(uploaded_file.name)[0]
+                    
                     # Offer the processed content as a downloadable Word document
                     st.download_button(
                         label="Download",
                         data=word_buffer,
-                        file_name="processed_document.docx",
+                        file_name=f"{original_filename}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
                 except Exception as e:
