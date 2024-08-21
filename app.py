@@ -9,6 +9,7 @@ import os
 
 # Set up OpenAI API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 def encode_pdf(file):
     return base64.b64encode(file.read()).decode('utf-8')
 
