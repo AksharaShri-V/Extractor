@@ -1,5 +1,5 @@
 streamlit
-PyPDF2
+pikepdf
 openai
 python-docx
 tiktoken
