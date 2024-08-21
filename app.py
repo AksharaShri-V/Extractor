@@ -1,5 +1,5 @@
 import streamlit as st
-import PyPDF2
+import pypdf  # Changed from PyPDF2 to pypdf
 import openai
 import io
 from docx import Document
@@ -9,8 +9,9 @@ import os
 
 # Set up OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
 def extract_text_from_pdf(file):
-    pdf_reader = PyPDF2.PdfReader(file)
+    pdf_reader = pypdf.PdfReader(file)  # Changed from PyPDF2.PdfReader to pypdf.PdfReader
     text = ""
     for page in pdf_reader.pages:
         text += page.extract_text() + "\n"
@@ -75,7 +76,7 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
     """
 
     response = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model="gpt-4",
         messages=[
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Process the following text chunk from a PDF, following the instructions given. {'This is the first chunk of the document.' if is_first_chunk else ''}\n\n{chunk}"}
