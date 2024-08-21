@@ -1,5 +1,5 @@
 import streamlit as st
-import pikepdf
+from pdfminer.high_level import extract_text
 import openai
 import io
 from docx import Document
@@ -9,13 +9,8 @@ import os
 
 # Set up OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
 def extract_text_from_pdf(file):
-    pdf = pikepdf.Pdf.open(file)
-    text = ""
-    for page in pdf.pages:
-        text += page.get_text() + "\n"
-    return text
+    return extract_text(file)
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     encoding = tiktoken.get_encoding(encoding_name)
