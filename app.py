@@ -9,8 +9,9 @@ import os
 
 # Set up OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
 def extract_text_from_pdf(file):
-    pdf_reader = PyPDF2.PdfReader(file)
+    pdf_reader = pypdf.PdfReader(file)
     text = ""
     for page in pdf_reader.pages:
         text += page.extract_text() + "\n"
