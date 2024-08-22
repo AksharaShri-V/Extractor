@@ -47,30 +47,31 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
     system_instruction = """
     You are an advanced AI assistant specialized in processing text from PDFs. Your tasks are:
 
-    1. Identify main headings, subheadings, and side headings. Use the following format:
+   1. Identify main headings, subheadings, and side headings. Use the following format:
        MAIN HEADING: text
        SUBHEADING: text
        SIDE HEADING: text
 
     2. Extract and format normal text paragraphs completely. Ensure no sentences or words are left incomplete.
 
-    3. Identify any listed data or enumerated information and preserve its original format. Do not add additional bullet points or enumeration if they already exist.
+    3. Identify any listed data or enumerated information and preserve its format.
 
     4. Detect any tabular data structures within the text. For each detected table:
-       - If the data is already in a bullet point or list format, preserve that format exactly.
-       - If the data is not in a list format, then convert each row of the table into a bullet point.
-       - Start each new bullet point (only for non-listed data) with the first column's value.
-       - Include all values from all columns in the bullet point.
-       - Ensure that the relationship between all columns is clearly expressed.
-       - Do not omit any data for brevity.
+       - Convert each row of the table into a bullet point
+       - Start each bullet point with the first column's value
+       - Include all values from all columns in the bullet point
+       - Ensure that the relationship between all columns is clearly expressed
+       - Do not omit any data for brevity
+       For example, if a table has columns "Name", "Age", "Occupation", and "Salary", a row might be converted to:
+       • John Doe, aged 30, works as a software engineer and earns $75,000 annually.
 
     5. Maintain the original order and context of the document while processing.
 
-    6. Do not use any special characters or symbols for formatting except when they are present in the original text.
+    6. Do not use any special characters or symbols for formatting except for the bullet points (•) for table data.
 
     7. It is crucial that you process and include ALL content from the given chunk. Do not truncate or omit any information.
 
-    Your goal is to extract and transform the document content completely, preserving all original information, structure, and formatting, while only adding new bullet points for tabular data that isn't already in a list format.
+    Your goal is to extract and transform the document content completely, preserving all original information and structure, while ensuring that tabular data is presented as bullet points that clearly convey the relationships between all data points.
 
     If this is the first chunk of the document, start with 'DOCUMENT START:'. If it's the last chunk, end with 'DOCUMENT END:'.
     """
