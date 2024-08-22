@@ -54,7 +54,7 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
 
     2. Extract and format normal text paragraphs completely. Ensure no sentences or words are left incomplete.
 
-    3. Identify any listed data or enumerated information and preserve its format.
+    3. Identify any listed data or enumerated information and preserve its format. Do not add additional bullet points or enumeration if they already exist.
 
     4. Detect any tabular data structures within the text. For each detected table:
        - Convert each row of the table into a bullet point
