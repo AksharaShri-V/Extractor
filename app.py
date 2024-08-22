@@ -116,7 +116,7 @@ def create_word_document(content):
     return buffer
 
 def main():
-    st.title("PDF Content Extractor to Word Document")
+    st.title("Smart Extract!")
 
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
