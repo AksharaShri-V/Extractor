@@ -77,7 +77,7 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
     """
 
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Process the following text chunk from a PDF, following the instructions given. {'This is the first chunk of the document.' if is_first_chunk else ''}\n\n{chunk}"}
@@ -135,14 +135,27 @@ def main():
                     base_delay = max(0.5, min(3, file_size / 1000000))  # 0.5 to 3 seconds
 
                     loading_messages = [
-                        "📄 Reading the document...",
-                        "🔍 Recognizing the tabular data...",
-                        "📊 Extracting...",
-                        "⏳ It is almost ready...",
-                        "🔄 Processing the chunk file...",
-                        "📐 Aligning the data...",
-                        "🔎 Rechecking with the original file...",
-                        "✅ Your file is ready!"
+                        "Reading the document... 📄",
+                        "Scanning text... 🔎",
+                        "Recognizing patterns... 🧠",
+                        "Detecting tabular data... 📊",
+                        "Extracting relevant sections... 🗂️",
+                        "Sorting through the details... 🗃️",
+                        "Almost there... ⏳",
+                        "Processing the chunk file... 🧩",
+                        "Organizing content... 🗒️",
+                        "Aligning the data... 🔧",
+                        "Checking consistency... ✔️",
+                        "Validating structure... ✅",
+                        "Rechecking with the original file... 🔄",
+                        "Matching formats... 🖋️",
+                        "Fine-tuning the output... ✨",
+                        "Polishing details... 🪄",
+                        "Your file is almost ready... 📂",
+                        "Wrapping up... 🎁",
+                        "Finalizing... 🚀",
+                        "Your file is ready! 🎉",
+                        "Click the download button to get your Word document. 💾"
                     ]
 
                     progress_placeholder = st.empty()
