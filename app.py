@@ -1,5 +1,5 @@
 import streamlit as st
-import pypdf
+import PyPDF2
 import openai
 import io
 from docx import Document
