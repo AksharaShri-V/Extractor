@@ -58,7 +58,6 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
 
     4. Detect any tabular data structures within the text. For each detected table:
        - Convert each row of the table into a bullet point only if it's not already in a bullet point format
-       - Start each bullet point with the first column's value
        - Include all values from all columns in the bullet point
        - Ensure that the relationship between all columns is clearly expressed
        - Do not omit any data for brevity
