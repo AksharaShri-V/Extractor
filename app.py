@@ -54,10 +54,11 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
 
     2. Extract and format normal text paragraphs completely. Ensure no sentences or words are left incomplete.
 
-    3. Identify any listed data or enumerated information and preserve its format. If the original text uses bullet points, maintain them. If not, use bullet points for listed items.
+    3. Identify any listed data or enumerated information and preserve its format.
 
     4. Detect any tabular data structures within the text. For each detected table:
-       - Convert each row of the table into a bullet point only if it's not already in a bullet point format
+       - Convert each row of the table into a bullet point
+       - Start each bullet point with the first column's value
        - Include all values from all columns in the bullet point
        - Ensure that the relationship between all columns is clearly expressed
        - Do not omit any data for brevity
@@ -66,17 +67,17 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
 
     5. Maintain the original order and context of the document while processing.
 
-    6. Use bullet points (•) only for table data or listed items that weren't originally bulleted.
+    6. Do not use any special characters or symbols for formatting except for the bullet points (•) for table data.
 
     7. It is crucial that you process and include ALL content from the given chunk. Do not truncate or omit any information.
 
-    Your goal is to extract and transform the document content completely, preserving all original information and structure, while ensuring that tabular data is presented clearly and listed items are appropriately formatted.
+    Your goal is to extract and transform the document content completely, preserving all original information and structure, while ensuring that tabular data is presented as bullet points that clearly convey the relationships between all data points.
 
     If this is the first chunk of the document, start with 'DOCUMENT START:'. If it's the last chunk, end with 'DOCUMENT END:'.
     """
 
     response = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model="gpt-4",
         messages=[
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": f"Process the following text chunk from a PDF, following the instructions given. {'This is the first chunk of the document.' if is_first_chunk else ''}\n\n{chunk}"}
@@ -87,6 +88,7 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
 def create_word_document(content):
     doc = Document()
     
+    # Define styles for different heading levels
     styles = doc.styles
     styles['Heading 1'].font.size = Pt(16)
     styles['Heading 2'].font.size = Pt(14)
@@ -121,40 +123,61 @@ def main():
 
     if uploaded_file is not None:
         if st.button("Process PDF"):
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            try:
-                file_contents = uploaded_file.read()
-                text = extract_text_from_pdf(io.BytesIO(file_contents))
-                chunks = split_into_chunks(text)
-                processed_chunks = []
+            with st.spinner("Processing PDF and generating Word document... This may take a while."):
+                try:
+                    file_contents = uploaded_file.read()
+                    text = extract_text_from_pdf(io.BytesIO(file_contents))
+                    chunks = split_into_chunks(text)
+                    processed_chunks = []
 
-                for i, chunk in enumerate(chunks):
-                    status_text.text(f"Processing chunk {i+1} of {len(chunks)}...")
-                    processed_chunk = process_chunk_with_openai(chunk, is_first_chunk=(i==0))
-                    processed_chunks.append(processed_chunk)
-                    progress_bar.progress((i + 1) / len(chunks))
-                    time.sleep(0.1)  # Add a small delay to make the progress visible
+                    # Calculate delay based on file size
+                    file_size = len(file_contents)
+                    base_delay = max(0.5, min(3, file_size / 1000000))  # 0.5 to 3 seconds
 
-                processed_text = "\n".join(processed_chunks)
-                
-                status_text.text("Creating Word document...")
-                word_buffer = create_word_document(processed_text)
-                
-                progress_bar.progress(1.0)
-                status_text.text("Processing complete!")
-                
-                original_filename = os.path.splitext(uploaded_file.name)[0]
-                
-                st.download_button(
-                    label="Download Processed Document",
-                    data=word_buffer,
-                    file_name=f"{original_filename}_processed.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-            except Exception as e:
-                st.error(f"An error occurred: {str(e)}")
+                    loading_messages = [
+                        "📄 Reading the document...",
+                        "🔍 Recognizing the tabular data...",
+                        "📊 Extracting...",
+                        "⏳ It is almost ready...",
+                        "🔄 Processing the chunk file...",
+                        "📐 Aligning the data...",
+                        "🔎 Rechecking with the original file...",
+                        "✅ Your file is ready!"
+                    ]
+
+                    progress_placeholder = st.empty()
+                    message_placeholder = st.empty()
+
+                    for i, chunk in enumerate(chunks):
+                        progress = (i + 1) / len(chunks)
+                        progress_placeholder.progress(progress)
+                        
+                        message_index = min(int(progress * len(loading_messages)), len(loading_messages) - 1)
+                        message_placeholder.info(loading_messages[message_index])
+                        
+                        processed_chunk = process_chunk_with_openai(chunk, is_first_chunk=(i==0))
+                        processed_chunks.append(processed_chunk)
+                        
+                        time.sleep(base_delay * (1 - progress))  # Delay decreases as progress increases
+
+                    processed_text = "\n".join(processed_chunks)
+                    word_buffer = create_word_document(processed_text)
+
+                    progress_placeholder.empty()
+                    message_placeholder.success("Processing complete. Click the button below to download the Word document.")
+                    
+                    # Use the original filename for the download
+                    original_filename = os.path.splitext(uploaded_file.name)[0]
+                    
+                    # Offer the processed content as a downloadable Word document
+                    st.download_button(
+                        label="📥 Download",
+                        data=word_buffer,
+                        file_name=f"{original_filename}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                except Exception as e:
+                    st.error(f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
     main()
