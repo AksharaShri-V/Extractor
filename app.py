@@ -57,6 +57,7 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
     3. Identify any listed data or enumerated information and preserve its format. Do not add additional bullet points or enumeration if they already exist.
 
     4. Detect any tabular data structures within the text. For each detected table:
+       - If the data is already in a bullet point or list format, preserve that format exactly.
        - Convert each row of the table into a bullet point
        - Start each bullet point with the first column's value
        - Include all values from all columns in the bullet point
