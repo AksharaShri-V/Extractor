@@ -4,6 +4,7 @@ import openai
 import io
 from docx import Document
 from docx.shared import Pt
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 import tiktoken
 import os
 import time
@@ -86,18 +87,30 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
     )
     return response.choices[0].message['content']
 
-def generate_summary(processed_text):
-    system_instruction = """
-    You are an AI assistant specialized in creating concise and easily understandable summaries. Your task is to create a brief summary of the given text. The summary should:
+def generate_summary(processed_text, filename):
+    system_instruction = f"""
+    You are an AI assistant specialized in creating concise and easily understandable summaries. Your task is to create a brief summary of the given text from the file "{filename}". The summary should:
 
-    1. Capture the main ideas and key points of the document in a concise manner.
-    2. Highlight only the most significant findings or conclusions.
-    3. Mention only the most important data or statistics, if present.
-    4. Be written in simple, clear language that is easy for a general audience to understand.
-    5. Be no longer than 150 words.
-    6. Use bullet points for clarity where appropriate.
+    1. Start with a generic introductory sentence about the document.
+    2. Capture the main ideas and key points of the document in a concise manner.
+    3. Highlight only the most significant findings or conclusions.
+    4. Mention only the most important data or statistics, if present.
+    5. Be written in simple, clear language that is easy for a general audience to understand.
+    6. Be no longer than 300 words, including the introductory and concluding sentences.
+    7. Use bullet points for clarity where appropriate.
+    8. End with a generic concluding sentence about the document's overall significance or relevance.
+    9. Identify 5-7 keywords from the document and mark them with asterisks (*keyword*).
 
     Your goal is to provide a summary that gives readers a quick overview of the document's core content, making it distinctly different from the full processed text.
+
+    Format the summary as follows:
+    SUMMARY START
+    [Introductory sentence]
+    
+    [Main summary content with keywords marked]
+    
+    [Concluding sentence]
+    SUMMARY END
     """
 
     response = openai.ChatCompletion.create(
@@ -140,11 +153,24 @@ def create_word_document(content):
     buffer.seek(0)
     return buffer
 
-def create_summary_document(summary):
+def create_summary_document(summary, filename):
     doc = Document()
     
-    doc.add_heading("Document Summary", level=1)
-    doc.add_paragraph(summary)
+    # Add title
+    title = doc.add_heading(f"Executive Summary of {filename}", level=0)
+    title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+    # Process summary content
+    summary_content = summary.split("SUMMARY START")[1].split("SUMMARY END")[0].strip()
+    paragraphs = summary_content.split('\n\n')
+
+    for para in paragraphs:
+        p = doc.add_paragraph()
+        for part in para.split('*'):
+            if p.runs:
+                p.add_run(part).bold = not p.runs[-1].bold
+            else:
+                p.add_run(part)
 
     buffer = io.BytesIO()
     doc.save(buffer)
@@ -213,14 +239,12 @@ def main():
 
                     # Generate summary
                     message_placeholder.info("Generating summary... 📝")
-                    summary = generate_summary(processed_text)
-                    summary_buffer = create_summary_document(summary)
+                    original_filename = os.path.splitext(uploaded_file.name)[0]
+                    summary = generate_summary(processed_text, original_filename)
+                    summary_buffer = create_summary_document(summary, original_filename)
 
                     progress_placeholder.empty()
                     message_placeholder.success("Processing complete. You can now download the full document and the summary.")
-                    
-                    # Use the original filename for the download
-                    original_filename = os.path.splitext(uploaded_file.name)[0]
                     
                     # Store the buffers in session state
                     st.session_state['word_buffer'] = word_buffer
