@@ -86,6 +86,28 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
     )
     return response.choices[0].message['content']
 
+def generate_summary(processed_text):
+    system_instruction = """
+    You are an AI assistant specialized in summarizing documents. Your task is to create a concise yet comprehensive summary of the given text. The summary should:
+
+    1. Capture the main ideas and key points of the document.
+    2. Highlight any significant findings or conclusions.
+    3. Mention any important data or statistics, if present.
+    4. Be written in a clear, professional tone.
+    5. Be no longer than 500 words.
+
+    Your goal is to provide a summary that gives readers a quick but thorough understanding of the document's content.
+    """
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": f"Summarize the following processed text:\n\n{processed_text}"}
+        ]
+    )
+    return response.choices[0].message['content']
+
 def create_word_document(content):
     doc = Document()
     
@@ -111,6 +133,17 @@ def create_word_document(content):
             doc.add_paragraph(line, style='List Bullet')
         else:
             doc.add_paragraph(line)
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+def create_summary_document(summary):
+    doc = Document()
+    
+    doc.add_heading("Document Summary", level=1)
+    doc.add_paragraph(summary)
 
     buffer = io.BytesIO()
     doc.save(buffer)
@@ -177,19 +210,33 @@ def main():
                     processed_text = "\n".join(processed_chunks)
                     word_buffer = create_word_document(processed_text)
 
+                    # Generate summary
+                    summary = generate_summary(processed_text)
+                    summary_buffer = create_summary_document(summary)
+
                     progress_placeholder.empty()
-                    message_placeholder.success("Processing complete. Click the button below to download the Word document.")
+                    message_placeholder.success("Processing complete. Click the buttons below to download the documents.")
                     
                     # Use the original filename for the download
                     original_filename = os.path.splitext(uploaded_file.name)[0]
                     
                     # Offer the processed content as a downloadable Word document
-                    st.download_button(
-                        label="📥 Download",
-                        data=word_buffer,
-                        file_name=f"{original_filename}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.download_button(
+                            label="📥 Download Full Document",
+                            data=word_buffer,
+                            file_name=f"{original_filename}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+                    with col2:
+                        st.download_button(
+                            label="📥 Download Summary",
+                            data=summary_buffer,
+                            file_name=f"{original_filename}_summary.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")
 
