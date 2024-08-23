@@ -88,22 +88,23 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
 
 def generate_summary(processed_text):
     system_instruction = """
-    You are an AI assistant specialized in summarizing documents. Your task is to create a concise yet comprehensive summary of the given text. The summary should:
+    You are an AI assistant specialized in creating concise and easily understandable summaries. Your task is to create a brief summary of the given text. The summary should:
 
-    1. Capture the main ideas and key points of the document.
-    2. Highlight any significant findings or conclusions.
-    3. Mention any important data or statistics, if present.
-    4. Be written in a clear, professional tone.
-    5. Be no longer than 500 words.
+    1. Capture the main ideas and key points of the document in a concise manner.
+    2. Highlight only the most significant findings or conclusions.
+    3. Mention only the most important data or statistics, if present.
+    4. Be written in simple, clear language that is easy for a general audience to understand.
+    5. Be no longer than 150 words.
+    6. Use bullet points for clarity where appropriate.
 
-    Your goal is to provide a summary that gives readers a quick but thorough understanding of the document's content.
+    Your goal is to provide a summary that gives readers a quick overview of the document's core content, making it distinctly different from the full processed text.
     """
 
     response = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[
             {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Summarize the following processed text:\n\n{processed_text}"}
+            {"role": "user", "content": f"Create a concise and easy-to-understand summary of the following processed text:\n\n{processed_text}"}
         ]
     )
     return response.choices[0].message['content']
@@ -189,14 +190,14 @@ def main():
                         "Wrapping up... 🎁",
                         "Finalizing... 🚀",
                         "Your file is ready! 🎉",
-                        "Click the download button to get your Word document. 💾"
+                        "Generating summary... 📝"
                     ]
 
                     progress_placeholder = st.empty()
                     message_placeholder = st.empty()
 
                     for i, chunk in enumerate(chunks):
-                        progress = (i + 1) / len(chunks)
+                        progress = (i + 1) / (len(chunks) + 1)  # +1 for summary generation
                         progress_placeholder.progress(progress)
                         
                         message_index = min(int(progress * len(loading_messages)), len(loading_messages) - 1)
@@ -211,34 +212,41 @@ def main():
                     word_buffer = create_word_document(processed_text)
 
                     # Generate summary
+                    message_placeholder.info("Generating summary... 📝")
                     summary = generate_summary(processed_text)
                     summary_buffer = create_summary_document(summary)
 
                     progress_placeholder.empty()
-                    message_placeholder.success("Processing complete. Click the buttons below to download the documents.")
+                    message_placeholder.success("Processing complete. You can now download the full document and the summary.")
                     
                     # Use the original filename for the download
                     original_filename = os.path.splitext(uploaded_file.name)[0]
                     
-                    # Offer the processed content as a downloadable Word document
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.download_button(
-                            label="📥 Download Full Document",
-                            data=word_buffer,
-                            file_name=f"{original_filename}.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        )
-                    with col2:
-                        st.download_button(
-                            label="📥 Download Summary",
-                            data=summary_buffer,
-                            file_name=f"{original_filename}_summary.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        )
+                    # Store the buffers in session state
+                    st.session_state['word_buffer'] = word_buffer
+                    st.session_state['summary_buffer'] = summary_buffer
+                    st.session_state['original_filename'] = original_filename
 
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")
+
+    # Always show download buttons if buffers are available
+    if 'word_buffer' in st.session_state and 'summary_buffer' in st.session_state:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="📥 Download Full Document",
+                data=st.session_state['word_buffer'],
+                file_name=f"{st.session_state['original_filename']}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+        with col2:
+            st.download_button(
+                label="📥 Download Summary",
+                data=st.session_state['summary_buffer'],
+                file_name=f"{st.session_state['original_filename']}_summary.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
 
 if __name__ == "__main__":
     main()
