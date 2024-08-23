@@ -94,23 +94,12 @@ def generate_summary(processed_text, filename):
     1. Start with a generic introductory sentence about the document.
     2. Capture the main ideas and key points of the document in a concise manner.
     3. Highlight only the most significant findings or conclusions.
-    4. Mention only the most important data or statistics, if present.
-    5. Be written in simple, clear language that is easy for a general audience to understand.
-    6. Be no longer than 300 words, including the introductory and concluding sentences.
-    7. Use bullet points for clarity where appropriate.
-    8. End with a generic concluding sentence about the document's overall significance or relevance.
-    9. Identify 5-7 keywords from the document and mark them with asterisks (*keyword*).
-
-    Your goal is to provide a summary that gives readers a quick overview of the document's core content, making it distinctly different from the full processed text.
-
-    Format the summary as follows:
-    SUMMARY START
-    [Introductory sentence]
+    4. Be written in simple, clear language that is easy for a general audience to understand.
+    5. Be no longer than 300 words, including the introductory and concluding sentences.
+    6. Use bullet points for clarity where appropriate.
+    7. End with a generic concluding sentence about the document's overall significance or relevance.
     
-    [Main summary content with keywords marked]
-    
-    [Concluding sentence]
-    SUMMARY END
+    Your goal is to provide a summary that gives readers a quick overview of the document's core content, making it distinctly different from the full processed text
     """
 
     response = openai.ChatCompletion.create(
@@ -157,7 +146,7 @@ def create_summary_document(summary, filename):
     doc = Document()
     
     # Add title
-    title = doc.add_heading(f"Executive Summary of {filename}", level=0)
+    title = doc.add_heading(f"Smart Summary", level=0)
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
     # Process summary content
