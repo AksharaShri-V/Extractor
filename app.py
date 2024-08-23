@@ -94,12 +94,23 @@ def generate_summary(processed_text, filename):
     1. Start with a generic introductory sentence about the document.
     2. Capture the main ideas and key points of the document in a concise manner.
     3. Highlight only the most significant findings or conclusions.
-    4. Be written in simple, clear language that is easy for a general audience to understand.
-    5. Be no longer than 300 words, including the introductory and concluding sentences.
-    6. Use bullet points for clarity where appropriate.
-    7. End with a generic concluding sentence about the document's overall significance or relevance.
+    4. Mention only the most important data or statistics, if present.
+    5. Be written in simple, clear language that is easy for a general audience to understand.
+    6. Be no longer than 300 words, including the introductory and concluding sentences.
+    7. Use bullet points for clarity where appropriate.
+    8. End with a generic concluding sentence about the document's overall significance or relevance.
+    9. Identify 5-7 keywords from the document and mark them with asterisks (*keyword*).
+
+    Your goal is to provide a summary that gives readers a quick overview of the document's core content, making it distinctly different from the full processed text.
+
+    Format the summary exactly as follows:
+    SUMMARY START
+    [Introductory sentence]
     
-    Your goal is to provide a summary that gives readers a quick overview of the document's core content, making it distinctly different from the full processed text
+    [Main summary content with keywords marked]
+    
+    [Concluding sentence]
+    SUMMARY END
     """
 
     response = openai.ChatCompletion.create(
@@ -109,7 +120,16 @@ def generate_summary(processed_text, filename):
             {"role": "user", "content": f"Create a concise and easy-to-understand summary of the following processed text:\n\n{processed_text}"}
         ]
     )
-    return response.choices[0].message['content']
+    
+    summary = response.choices[0].message['content']
+    
+    # Ensure the summary is properly formatted
+    if not summary.startswith("SUMMARY START"):
+        summary = "SUMMARY START\n" + summary
+    if not summary.endswith("SUMMARY END"):
+        summary += "\nSUMMARY END"
+    
+    return summary
 
 def create_word_document(content):
     doc = Document()
@@ -146,20 +166,25 @@ def create_summary_document(summary, filename):
     doc = Document()
     
     # Add title
-    title = doc.add_heading(f"Smart Summary", level=0)
+    title = doc.add_heading(f"Executive Summary of {filename}", level=0)
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
     # Process summary content
-    summary_content = summary.split("SUMMARY START")[1].split("SUMMARY END")[0].strip()
+    summary_parts = summary.split("SUMMARY START")
+    if len(summary_parts) > 1:
+        summary_content = summary_parts[1].split("SUMMARY END")[0].strip()
+    else:
+        summary_content = summary  # If SUMMARY START is not found, use the entire summary
+
     paragraphs = summary_content.split('\n\n')
 
     for para in paragraphs:
         p = doc.add_paragraph()
-        for part in para.split('*'):
-            if p.runs:
-                p.add_run(part).bold = not p.runs[-1].bold
-            else:
-                p.add_run(part)
+        parts = para.split('*')
+        for i, part in enumerate(parts):
+            run = p.add_run(part)
+            if i % 2 == 1:  # Every odd part (1, 3, 5, ...) should be bold
+                run.bold = True
 
     buffer = io.BytesIO()
     doc.save(buffer)
