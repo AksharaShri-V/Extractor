@@ -4,10 +4,10 @@ import openai
 import io
 from docx import Document
 from docx.shared import Pt
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 import tiktoken
 import os
 import time
-import re
 
 # Set up OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -44,61 +44,36 @@ def split_into_chunks(text, max_tokens=3000):
 
     return chunks
 
-def extract_tables_from_text(text):
-    # This is a basic pattern and might need refinement for complex tables
-    table_pattern = r'(\|.*\|[\n\r])+\|.*\|'
-    return re.findall(table_pattern, text)
-
-def convert_table_to_markdown(table_text):
-    lines = table_text.strip().split('\n')
-    markdown_table = '| ' + ' | '.join(lines[0].strip('|').split('|')) + ' |\n'
-    markdown_table += '| ' + ' | '.join(['---' for _ in range(len(lines[0].strip('|').split('|')))]) + ' |\n'
-    for line in lines[1:]:
-        markdown_table += '| ' + ' | '.join(line.strip('|').split('|')) + ' |\n'
-    return markdown_table
-
-def process_table_with_llm(markdown_table):
-    response = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are an AI assistant specialized in interpreting tabular data. Your task is to analyze the given Markdown table and form meaningful sentences based on the row and column values."},
-            {"role": "user", "content": f"Please analyze this table and provide a summary in natural language:\n\n{markdown_table}"}
-        ]
-    )
-    return response.choices[0].message['content']
-
 def process_chunk_with_openai(chunk, is_first_chunk=False):
-    # Extract tables from the chunk
-    tables = extract_tables_from_text(chunk)
-    
-    # Process tables
-    processed_tables = []
-    for table in tables:
-        markdown_table = convert_table_to_markdown(table)
-        table_summary = process_table_with_llm(markdown_table)
-        processed_tables.append(f"Original Table (Markdown format):\n{markdown_table}\n\nTable Summary:\n{table_summary}")
-    
-    # Remove table text from the chunk
-    non_table_text = re.sub(r'(\|.*\|[\n\r])+\|.*\|', '', chunk)
-    
-    # Process non-table text
     system_instruction = """
     You are an advanced AI assistant specialized in processing text from PDFs. Your tasks are:
 
-    1. Identify main headings, subheadings, and side headings. Use the following format:
+   1. Identify main headings, subheadings, and side headings. Use the following format:
        MAIN HEADING: text
        SUBHEADING: text
        SIDE HEADING: text
 
     2. Extract and format normal text paragraphs completely. Ensure no sentences or words are left incomplete.
 
-    3. Identify any listed data or enumerated information and preserve its format.
+    3. Identify any listed data or enumerated information and preserve its format. Do not add additional bullet points or enumeration if they already exist.
 
-    4. Maintain the original order and context of the document while processing.
+    4. Detect any tabular data structures within the text. For each detected table:
+       - If the data is already in a bullet point or list format, preserve that format exactly.
+       - Convert each row of the table into a bullet point
+       - Start each bullet point with the first column's value
+       - Include all values from all columns in the bullet point
+       - Ensure that the relationship between all columns is clearly expressed
+       - Do not omit any data for brevity
+       For example, if a table has columns "Name", "Age", "Occupation", and "Salary", a row might be converted to:
+       • John Doe, aged 30, works as a software engineer and earns $75,000 annually.
 
-    5. Do not use any special characters or symbols for formatting except for the bullet points (•) for listed data.
+    5. Maintain the original order and context of the document while processing.
 
-    It is crucial that you process and include ALL content from the given chunk. Do not truncate or omit any information.
+    6. Do not use any special characters or symbols for formatting except for the bullet points (•) for table data.
+
+    7. It is crucial that you process and include ALL content from the given chunk. Do not truncate or omit any information.
+
+    Your goal is to extract and transform the document content completely, preserving all original information and structure, while ensuring that tabular data is presented as bullet points that clearly convey the relationships between all data points.
 
     If this is the first chunk of the document, start with 'DOCUMENT START:'. If it's the last chunk, end with 'DOCUMENT END:'.
     """
@@ -107,14 +82,54 @@ def process_chunk_with_openai(chunk, is_first_chunk=False):
         model="gpt-4o",
         messages=[
             {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Process the following text chunk from a PDF, following the instructions given. {'This is the first chunk of the document.' if is_first_chunk else ''}\n\n{non_table_text}"}
+            {"role": "user", "content": f"Process the following text chunk from a PDF, following the instructions given. {'This is the first chunk of the document.' if is_first_chunk else ''}\n\n{chunk}"}
+        ]
+    )
+    return response.choices[0].message['content']
+
+def generate_summary(processed_text, filename):
+    system_instruction = f"""
+    You are an AI assistant specialized in creating concise and easily understandable summaries. Your task is to create a brief summary of the given text from the file "{filename}". The summary should:
+
+    1. Start with a generic introductory sentence about the document.
+    2. Capture the main ideas and key points of the document in a concise manner.
+    3. Highlight only the most significant findings or conclusions.
+    4. Mention only the most important data or statistics, if present.
+    5. Be written in simple, clear language that is easy for a general audience to understand.
+    6. Be no longer than 300 words, including the introductory and concluding sentences.
+    7. Use bullet points for clarity where appropriate.
+    8. End with a generic concluding sentence about the document's overall significance or relevance.
+    9. Identify 5-7 keywords from the document and mark them with asterisks (*keyword*).
+
+    Your goal is to provide a summary that gives readers a quick overview of the document's core content, making it distinctly different from the full processed text.
+
+    Format the summary exactly as follows:
+    SUMMARY START
+    [Introductory sentence]
+    
+    [Main summary content with keywords marked]
+    
+    [Concluding sentence]
+    SUMMARY END
+    """
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": f"Create a concise and easy-to-understand summary of the following processed text:\n\n{processed_text}"}
         ]
     )
     
-    processed_text = response.choices[0].message['content']
+    summary = response.choices[0].message['content']
     
-    # Combine processed tables and text
-    return processed_text + "\n\n" + "\n\n".join(processed_tables)
+    # Ensure the summary is properly formatted
+    if not summary.startswith("SUMMARY START"):
+        summary = "SUMMARY START\n" + summary
+    if not summary.endswith("SUMMARY END"):
+        summary += "\nSUMMARY END"
+    
+    return summary
 
 def create_word_document(content):
     doc = Document()
@@ -139,10 +154,6 @@ def create_word_document(content):
             doc.add_paragraph(line.replace('SIDE HEADING:', '').strip(), style='Heading 3')
         elif line.startswith('•'):
             doc.add_paragraph(line, style='List Bullet')
-        elif line.startswith('Original Table (Markdown format):'):
-            doc.add_paragraph(line, style='Intense Quote')
-        elif line.startswith('Table Summary:'):
-            doc.add_paragraph(line, style='Quote')
         else:
             doc.add_paragraph(line)
 
@@ -151,8 +162,37 @@ def create_word_document(content):
     buffer.seek(0)
     return buffer
 
+def create_summary_document(summary, filename):
+    doc = Document()
+    
+    # Add title
+    title = doc.add_heading(f"Executive Summary of {filename}", level=0)
+    title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+    # Process summary content
+    summary_parts = summary.split("SUMMARY START")
+    if len(summary_parts) > 1:
+        summary_content = summary_parts[1].split("SUMMARY END")[0].strip()
+    else:
+        summary_content = summary  # If SUMMARY START is not found, use the entire summary
+
+    paragraphs = summary_content.split('\n\n')
+
+    for para in paragraphs:
+        p = doc.add_paragraph()
+        parts = para.split('*')
+        for i, part in enumerate(parts):
+            run = p.add_run(part)
+            if i % 2 == 1:  # Every odd part (1, 3, 5, ...) should be bold
+                run.bold = True
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
 def main():
-    st.title("Smart Extract with Table Processing!")
+    st.title("Smart Extract!")
 
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
@@ -171,32 +211,16 @@ def main():
 
                     loading_messages = [
                         "Reading the document... 📄",
-                        "Scanning text... 🔎",
                         "Recognizing patterns... 🧠",
-                        "Detecting tabular data... 📊",
-                        "Extracting relevant sections... 🗂️",
-                        "Sorting through the details... 🗃️",
-                        "Almost there... ⏳",
-                        "Processing the chunk file... 🧩",
                         "Organizing content... 🗒️",
-                        "Aligning the data... 🔧",
-                        "Checking consistency... ✔️",
-                        "Validating structure... ✅",
-                        "Rechecking with the original file... 🔄",
-                        "Matching formats... 🖋️",
-                        "Fine-tuning the output... ✨",
-                        "Polishing details... 🪄",
-                        "Your file is almost ready... 📂",
-                        "Wrapping up... 🎁",
-                        "Finalizing... 🚀",
-                        "Your file is ready! 🎉"
+                        "Finalizing... 🚀"
                     ]
 
                     progress_placeholder = st.empty()
                     message_placeholder = st.empty()
 
                     for i, chunk in enumerate(chunks):
-                        progress = (i + 1) / len(chunks)
+                        progress = (i + 1) / (len(chunks) + 1)  # +1 for summary generation
                         progress_placeholder.progress(progress)
                         
                         message_index = min(int(progress * len(loading_messages)), len(loading_messages) - 1)
@@ -210,24 +234,40 @@ def main():
                     processed_text = "\n".join(processed_chunks)
                     word_buffer = create_word_document(processed_text)
 
+                    # Generate summary
+                    message_placeholder.info("Generating summary... 📝")
+                    original_filename = os.path.splitext(uploaded_file.name)[0]
+                    summary = generate_summary(processed_text, original_filename)
+                    summary_buffer = create_summary_document(summary, original_filename)
+
                     progress_placeholder.empty()
-                    message_placeholder.success("Processing complete. You can now download the full document.")
+                    message_placeholder.success("Processing complete. You can now download the full document and the summary.")
                     
-                    # Store the buffer in session state
+                    # Store the buffers in session state
                     st.session_state['word_buffer'] = word_buffer
-                    st.session_state['original_filename'] = os.path.splitext(uploaded_file.name)[0]
+                    st.session_state['summary_buffer'] = summary_buffer
+                    st.session_state['original_filename'] = original_filename
 
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")
 
-    # Show download button if buffer is available
-    if 'word_buffer' in st.session_state:
-        st.download_button(
-            label="📥 Download Processed Document",
-            data=st.session_state['word_buffer'],
-            file_name=f"{st.session_state['original_filename']}_processed.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+    # Always show download buttons if buffers are available
+    if 'word_buffer' in st.session_state and 'summary_buffer' in st.session_state:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="📥 Download Full Document",
+                data=st.session_state['word_buffer'],
+                file_name=f"{st.session_state['original_filename']}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+        with col2:
+            st.download_button(
+                label="📥 Download Summary",
+                data=st.session_state['summary_buffer'],
+                file_name=f"{st.session_state['original_filename']}_summary.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
 
 if __name__ == "__main__":
     main()
